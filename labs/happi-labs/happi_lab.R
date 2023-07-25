@@ -29,15 +29,16 @@
 # this script).
 
 # To install: 
-#if (!require("remotes", quietly = TRUE))
-#  install.packages("remotes") # check that remotes is installed
-
+if (!("remotes" %in% row.names(installed.packages()))) {
+  install.packages("remotes")
+}
 # Install happi using remotes and build vignettes: 
-#remotes::install_github("statdivlab/happi", build_vignettes = TRUE, dependencies = TRUE) 
+if (!("happi" %in% row.names(installed.packages()))) {
+  remotes::install_github("statdivlab/happi", build_vignettes = TRUE, dependencies = TRUE) 
+}
 
 # if you want to check that `happi` is installed on your system you can run: 
 "happi" %in% rownames(installed.packages()) # This should return [1] TRUE if happi is installed
-
 
 # --------------------- Load required packages for this lab -------------------------
 
@@ -46,7 +47,7 @@ library(happi)
 library(tidyverse)
 library(ggplot2)
 
-prausnitzii_data <- read_csv("https://raw.githubusercontent.com/statdivlab/stamps2022/main/Thursday-afternoon/labs/happi_lab/stamps_prausnitzii.csv")
+prausnitzii_data <- read_csv("https://raw.githubusercontent.com/statdivlab/stamps2023/main/labs/happi-labs/stamps_prausnitzii.csv")
 
 # --------------------- Data description -------------------------
 
@@ -155,6 +156,7 @@ x_matrix <- model.matrix(~farm_worker, data = isomerase) # create design matrix 
 #  - method: method for estimating f. Defaults to "splines" which fits a monotone spline with df determined by argument spline_df; "isotone" for isotonic regression fit
 #  - firth: uses Firth penalty (default is TRUE)
 #  - spline_df: degrees of freedom (in addition to intercept) to use in monotone spline fit (default is 3)
+#  - verbose: do you want all the intermediate values used by happi (TRUE) or just the final output (FALSE)
 
 happi_results <- happi(outcome=isomerase$`L-rhamnose isomerase`, 
                        covariate=x_matrix, 
@@ -164,18 +166,14 @@ happi_results <- happi(outcome=isomerase$`L-rhamnose isomerase`,
                        epsilon=0, 
                        method = "splines", 
                        firth = T, 
-                       spline_df = 3)
+                       spline_df = 3,
+                       verbose = FALSE)
 
 # Let's look  at our results! 
-# ** note that the p-value results are stored in a vector (happi_results$loglik$pvalue) that is the length of 
-# the number of max_iterations you specified. If the algorithm reaches the change_threshold requirements 
-# before the max_iterations (i.e., converges sooner), this will result in a lot of NAs at the end because the algorithm completes earlier. 
-# The final p-value result is the last element of happi_results$loglik$pvalue before the trailing NAs. 
-# In this particular example that would be element 42 as can be seen using happi_results$loglik$pvalue[42] or...
 
-happi_results$loglik$pvalue %>% tibble() %>% filter(!is.na(.)) %>% tail(1)
+happi_results$p_val
 
-# We see that the p-value we get from `happi` is p = 0.180 and that this p-value is 
+# We see that the p-value we get from `happi` is p = 0.304 and that this p-value is 
 # larger than the p-value (p = 0.07) we got using GLM + Rao when we didn't account for mean coverage. 
 
 # Recall from our picture that this gene was more detected in higher-converage
@@ -187,15 +185,15 @@ happi_results$loglik$pvalue %>% tibble() %>% filter(!is.na(.)) %>% tail(1)
 
 # If we want to get the beta estimates from happi we can run the following: 
 
-happi_results$beta %>% tibble() %>% drop_na() %>% tail(1)
+happi_results$beta
 
 #.[,1]  [,2]
 # <dbl> <dbl>
-# -0.699  2.98
-# and we see that our estimates are -0.699 for our intercept beta_0
+# -0.694  2.98
+# and we see that our estimates are -0.694 for our intercept beta_0
 # and our estimate for beta_1 which corresponds to our predictor of interest is 2.98 
 # Based on our results, we see that the gene encoding for L-rhamnose isomerase is more enriched in 
-# F. prausnitzii MAGs found in farm workers but that this difference is not significant at the 5% significance level (p = 0.180). 
+# F. prausnitzii MAGs found in farm workers but that this difference is not significant at the 5% significance level (p = 0.303). 
 
 
 # --------------------- But what if I have thousands of genes I want to look at? -------------------------
@@ -216,15 +214,16 @@ x_matrix_prausnitzii <- model.matrix(~farm_worker, data = prausnitzii_data)
 # this function will take in a gene (denoted by the column of the dataframe prausnitzii_data) and run happi on that gene
 
 run_happi_prausnitzii <- function(colnum) {
-  happi(outcome=unlist(prausnitzii_data[,colnum]), 
-        covariate=x_matrix_prausnitzii, 
-        quality_var=prausnitzii_data$mean_coverage,
-        method="splines", 
-        firth=T, 
-        spline_df=3,
-        max_iterations=100, 
-        change_threshold=0.01, 
-        epsilon=0)
+  happi(outcome = unlist(prausnitzii_data[,colnum]), 
+        covariate = x_matrix_prausnitzii, 
+        quality_var = prausnitzii_data$mean_coverage,
+        method = "splines", 
+        firth = T, 
+        spline_df = 3,
+        max_iterations = 100, 
+        change_threshold = 0.01, 
+        epsilon = 0,
+        verbose = FALSE)
 }
 
 # For the purposes of this lab we will not be running all the COG functions and will focus on only 50. 
@@ -241,10 +240,17 @@ prausnitzii_results <- mclapply(3:52, run_happi_prausnitzii, mc.cores=6)
 
 # we store our results in prausnitzii_results and can consolidate our beta estimates along with p-values using
 
-pvalue_prausnitzii <- lapply(prausnitzii_results, function(x) tail(x$loglik$pvalue[!is.na(x$loglik$pvalue)], 1)) %>% unlist
-beta_prausnitzii <- lapply(prausnitzii_results, function(x) tail(x$beta[!is.na(x$beta[,1]),],1)) %>% do.call("rbind",.)
+# we were only able to optimize our model for some COG functions
+error_cogs <- unlist(lapply(prausnitzii_results, function(x) str_detect(x[[1]], "Error")))
+sum(error_cogs)
+# we were not able to optimize the model for 25 of the 50 COG functions
 
-prausnitzii_hyp_results <- tibble("gene" = colnames(prausnitzii_data)[3:52], # grab the names of each gene from prausnitzii_data
+# make a vector of p-values for COG functions for which we were able to optimize the model
+pvalue_prausnitzii <- lapply(prausnitzii_results[!error_cogs], function(x) x$p_val) %>% unlist
+# make a matrix of coefficients for COG functions for which we were able to optimize the model
+beta_prausnitzii <- lapply(prausnitzii_results[!error_cogs], function(x) x$beta) %>% do.call("rbind",.)
+
+prausnitzii_hyp_results <- tibble("gene" = (colnames(prausnitzii_data)[3:52])[!error_cogs], # grab the names of each gene from prausnitzii_data
                                   pvalue_prausnitzii, # Combine with our pvalues and betas
                                   beta_prausnitzii[,1],
                                   beta_prausnitzii[,2]) %>% 
@@ -288,28 +294,39 @@ head(prausnitzii_hyp_results)
 x_matrix_prausnitzii <- model.matrix(~farm_worker, data = prausnitzii_data)
 
 run_happi_prausnitzii_e05 <- function(colnum) {
-  happi(outcome=unlist(prausnitzii_data[,colnum]), 
-        covariate=x_matrix_prausnitzii, 
-        quality_var=prausnitzii_data$mean_coverage,
-        method="splines", 
-        firth=T, 
-        spline_df=3,
-        max_iterations=100, 
-        change_threshold=0.01, 
-        epsilon=0.05)
+  happi(outcome = unlist(prausnitzii_data[,colnum]), 
+        covariate = x_matrix_prausnitzii, 
+        quality_var = prausnitzii_data$mean_coverage,
+        method = "splines", 
+        firth = T, 
+        spline_df = 3,
+        max_iterations = 100, 
+        change_threshold = 0.01, 
+        epsilon = 0.05,
+        verbose = FALSE)
 }
 prausnitzii_results_e05 <- mclapply(3:52, run_happi_prausnitzii_e05, mc.cores=6) # this should only take about a minute or two to finish running... 
 # we store our results in prausnitzii_results_e05 and can consolidate our beta estimates along with p-values using
-pvalue_prausnitzii_e05 <- lapply(prausnitzii_results_e05, function(x) tail(x$loglik$pvalue[!is.na(x$loglik$pvalue)], 1)) %>% unlist
-beta_prausnitzii_e05 <- lapply(prausnitzii_results_e05, function(x) tail(x$beta[!is.na(x$beta[,1]),],1)) %>% do.call("rbind",.)
+# we were only able to optimize our model for some COG functions
+error_cogs_e05 <- unlist(lapply(prausnitzii_results_e05, function(x) str_detect(x[[1]], "Error")))
+sum(error_cogs_e05)
+# we were not able to optimize the model for 8 of the 50 COG functions
+
+# make a vector of p-values for COG functions for which we were able to optimize the model
+pvalue_prausnitzii_e05 <- lapply(prausnitzii_results_e05[!error_cogs_e05], function(x) x$p_val) %>% unlist
+# make a matrix of coefficients for COG functions for which we were able to optimize the model
+beta_prausnitzii_e05 <- lapply(prausnitzii_results_e05[!error_cogs_e05], function(x) x$beta) %>% do.call("rbind",.)
+
+prausnitzii_hyp_results_e05 <- tibble("gene" = (colnames(prausnitzii_data)[3:52])[!error_cogs_e05], # grab the names of each gene from prausnitzii_data
+                                      pvalue_prausnitzii_e05, # Combine with our pvalues and betas
+                                      beta_prausnitzii_e05[,1],
+                                      beta_prausnitzii_e05[,2]) %>% 
+  arrange(pvalue_prausnitzii_e05)
 
 # To compare results let's merge both sets of results and look at the differences between the 
 # p-values, beta0, and beta1 when using epsilon = 0 and 0.05 
-prausnitzii_hyp_results_comparison <- tibble("gene" = colnames(prausnitzii_data)[3:52], # grab the names of each gene from prausnitzii_data
-                                             pvalue_prausnitzii_e05, # Combine with our pvalues and betas
-                                             beta_prausnitzii_e05[,1],
-                                             beta_prausnitzii_e05[,2]) %>% 
-  full_join(prausnitzii_hyp_results, by = "gene") %>% # merge with previous results when epsilon = 0 
+prausnitzii_hyp_results_comparison <- 
+  full_join(prausnitzii_hyp_results, prausnitzii_hyp_results_e05, by = "gene") %>% # merge with previous results when epsilon = 0 
   mutate(pvalue_diff = round(pvalue_prausnitzii_e05-pvalue_prausnitzii, 3), # round differences to 3 decimal places 
          beta0_diff = round(as.numeric(`beta_prausnitzii_e05[, 1]`) - as.numeric(`beta_prausnitzii[, 1]`), 3), 
          beta1_diff = round(as.numeric(`beta_prausnitzii_e05[, 2]`) - as.numeric(`beta_prausnitzii[, 2]`), 3)) 
@@ -320,7 +337,8 @@ prausnitzii_hyp_results_comparison %>%
   geom_abline() +
   xlab("happi pvalues with "~epsilon~"=0.05") +
   ylab("happi pvalues with "~epsilon~"=0")
-# So we see that these results are pretty robust to these choices of epsilon.
+# So we see that these results are pretty robust to these choices of epsilon (although we're
+# able to optimize the model for more of the COG functions when epsilon = 0.05).
 
 # By conducting this sensitivity analysis, 
 # we can feel more confident about the robustness of our results to things like contamination 

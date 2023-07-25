@@ -16,6 +16,9 @@ library(gridExtra)
 
 ## If you're on your own machine at home, you will need to install breakaway and DivNet.
 ## Here's how you can do this! 
+if (!("remotes" %in% row.names(installed.packages()))) {
+  install.packages("remotes")
+}
 if (!("breakaway" %in% row.names(installed.packages()))) {
   remotes::install_github("adw96/breakaway")
 }

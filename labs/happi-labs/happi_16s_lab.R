@@ -32,11 +32,13 @@
 # this script).
 
 # To install: 
-#if (!require("remotes", quietly = TRUE))
-#  install.packages("remotes") # check that remotes is installed
-
+if (!("remotes" %in% row.names(installed.packages()))) {
+  install.packages("remotes")
+}
 # Install happi using remotes and build vignettes: 
-#remotes::install_github("statdivlab/happi", build_vignettes = TRUE, dependencies = TRUE) 
+if (!("happi" %in% row.names(installed.packages()))) {
+  remotes::install_github("statdivlab/happi", build_vignettes = TRUE, dependencies = TRUE) 
+}
 
 # if you want to check that `happi` is installed on your system you can run: 
 "happi" %in% rownames(installed.packages()) # This should return [1] TRUE if happi is installed
@@ -49,9 +51,12 @@ library(happi)
 library(tidyverse)
 library(ggplot2)
 
-# We are going to use the same data that you used for the `corncob` lab. To do this, we will
+# We are going to use data from the package `corncob` lab. To do this, we will install and
 # load the `corncob` package, along with the `phyloseq` package to work with the soil data.
 
+if (!("corncob" %in% row.names(installed.packages()))) {
+  remotes::install_github("bryandmartin/corncob") 
+}
 library(corncob)
 library(phyloseq)
 data(soil_phylo)
@@ -127,7 +132,7 @@ covar_df <- data.frame(sample_data(soil)) %>%
   select(sample_name, soil_add)
 
 soil_df <- inner_join(pres_mat, covar_df, by = "sample_name")
-  
+
 # Finally, we need information about sampling depth. For each sample, we'll 
 # record the number of total reads across all taxa in that sample. 
 
@@ -203,6 +208,7 @@ x_matrix <- model.matrix(~soil_add, data = tnct_df)
 #  - firth: uses Firth penalty (default is TRUE)
 #  - spline_df: degrees of freedom (in addition to intercept) to use in monotone spline fit 
 #    (default is 3)
+#  - verbose: do you want all the intermediate values used by happi (TRUE) or just the final output (FALSE)
 
 happi_results <- happi(outcome = tnct_df$Tenericutes, 
                        covariate = x_matrix, 
@@ -212,22 +218,17 @@ happi_results <- happi(outcome = tnct_df$Tenericutes,
                        epsilon = 0, 
                        method = "splines", 
                        firth = T, 
-                       spline_df = 3)
+                       spline_df = 3,
+                       verbose = FALSE)
 
 # Let's look  at our results! 
-# ** note that the p-value results are stored in a vector (happi_results$loglik$pvalue) that 
-# is the length of the number of max_iterations you specified. If the algorithm reaches the 
-# change_threshold requirements before the max_iterations (i.e., converges sooner), this will 
-# result in a lot of NAs at the end because the algorithm completes earlier. The final p-value result is the last element
-# of happi_results$loglik$pvalue before the trailing NAs. In this particular example that would 
-# be element 42 as can be seen using happi_results$loglik$pvalue[42] or...
 
-happi_results$loglik$pvalue %>% tibble() %>% filter(!is.na(.)) %>% tail(1)
+happi_results$p_val
 
-# Our p-value here is 0.036. In this case, at an alpha level of 0.05, we still able to 
+# Our p-value here is 0.013. In this case, at an alpha level of 0.05, we still able to 
 # reject the null hypothesis. However, the strength of our evidence against the null hypothesis
-# is lower (a higher p-value) because we've now accounted for different sequencing depth in our
-# model. 
+# is slightly lower (a higher p-value) because we've now accounted for different sequencing depth 
+# in our model. 
 
 # Recall from our picture that this taxon was less detected in lower sequencing depth samples.
 # happi gives a larger p-value (less evidence for a difference in odds of presence across groups) 
@@ -238,7 +239,7 @@ happi_results$loglik$pvalue %>% tibble() %>% filter(!is.na(.)) %>% tail(1)
 
 # If we want to get the coefficient estimates from happi we can run the following: 
 
-happi_results$beta %>% tibble() %>% drop_na() %>% tail(1)
+happi_results$beta
 
 # and we see that our estimates are 1.46 for our intercept beta_0 and our estimate for beta_1 
 # which corresponds to the presence of soil amendments is -1.08. Based on our results, we see 
@@ -271,7 +272,8 @@ run_happi_all <- function(colnum) {
         spline_df = 3,
         max_iterations = 100, 
         change_threshold = 0.01, 
-        epsilon = 0)
+        epsilon = 0,
+        verbose = FALSE)
 }
 
 # Additionally for quicker run-time we're going to keep the max_iterations 100 and a change 
@@ -285,18 +287,20 @@ all_taxa_results <- mclapply(1:39, run_happi_all, mc.cores=6)
 # and mc.cores allows us to specify how many cores we want to allocate to this computational 
 # task 
 
-# we store our results in all_taxa_results and can consolidate our beta estimates along with
-# p-values using
+# we were only able to optimize our model for some taxa
+error_taxa <- unlist(lapply(all_taxa_results, function(x) str_detect(x[[1]], "Error")))
+sum(error_taxa)
+# we were not able to optimize the model for 6 of the 39 taxa
 
-pvalues <- lapply(all_taxa_results, function(x) tail(x$loglik$pvalue[!is.na(x$loglik$pvalue)], 1)) %>% unlist
-betas <- lapply(all_taxa_results, function(x) tail(x$beta[!is.na(x$beta[,1]),],1)) %>% do.call("rbind",.)
+# make a vector of p-values for taxa for which we were able to optimize the model
+pvalues <- lapply(all_taxa_results[!error_taxa], function(x) x$p_val) %>% unlist
+# make a matrix of coefficients for COG functions for which we were able to optimize the model
+betas <- lapply(all_taxa_results[!error_taxa], function(x) x$beta) %>% do.call("rbind",.)
 
-# let's combine our taxon name with our p-values and beta estimates
-
-hyp_results <- tibble("taxon" = colnames(soil_df)[1:39], 
-                                  pvalues, 
-                                  betas[,1],
-                                  betas[,2]) %>% 
+hyp_results <- tibble("taxon" = (colnames(soil_df)[1:39])[!error_taxa], 
+                      pvalues, 
+                      betas[,1],
+                      betas[,2]) %>% 
   arrange(pvalues)
 head(hyp_results)
 
@@ -342,21 +346,28 @@ run_happi_all_e05 <- function(colnum) {
         spline_df = 3,
         max_iterations = 100, 
         change_threshold = 0.01, 
-        epsilon = 0.05)
+        epsilon = 0.05,
+        verbose = FALSE)
 }
 all_taxa_results_e05 <- mclapply(1:39, run_happi_all_e05, mc.cores=6) 
-# we store our results in all_taxa_results_e05 and can consolidate our beta estimates along 
-# with p-values using
-pvalues_e05 <- lapply(all_taxa_results_e05, function(x) tail(x$loglik$pvalue[!is.na(x$loglik$pvalue)], 1)) %>% unlist
-betas_e05 <- lapply(all_taxa_results_e05, function(x) tail(x$beta[!is.na(x$beta[,1]),],1)) %>% do.call("rbind",.)
+
+# we were able to optimize our model for all taxa. Great!
+
+# make a vector of p-values for taxa for which we were able to optimize the model
+pvalues_e05 <- lapply(all_taxa_results_e05, function(x) x$p_val) %>% unlist
+# make a matrix of coefficients for COG functions for which we were able to optimize the model
+betas_e05 <- lapply(all_taxa_results_e05, function(x) x$beta) %>% do.call("rbind",.)
+
+hyp_results_e05 <- tibble("taxon" = colnames(soil_df)[1:39], 
+                          pvalues_e05, 
+                          betas_e05[,1],
+                          betas_e05[,2]) %>% 
+  arrange(pvalues_e05)
+head(hyp_results_e05)
 
 # To compare results let's merge both sets of results and look at the differences between the 
 # p-values, beta0, and beta1 when using epsilon = 0 and 0.05 
-hyp_results_comparison <- tibble("taxon" = colnames(soil_df)[1:39],
-                                             pvalues_e05, 
-                                             betas_e05[,1],
-                                             betas_e05[,2]) %>% 
-  full_join(hyp_results, by = "taxon") %>% # merge with previous results when epsilon = 0 
+hyp_results_comparison <- full_join(hyp_results, hyp_results_e05, by = "taxon") %>% # merge with previous results when epsilon = 0 
   mutate(pvalue_diff = round(pvalues_e05-pvalues, 3), # round differences to 3 decimal places 
          beta0_diff = round(as.numeric(`betas_e05[, 1]`) - as.numeric(`betas[, 1]`), 3), 
          beta1_diff = round(as.numeric(`betas_e05[, 2]`) - as.numeric(`betas[, 2]`), 3)) %>%
@@ -375,40 +386,33 @@ hyp_results_comparison %>%
   ylim(c(0,1))
 
 # Here we can see that many of our p-values are very similar when we change epsilon. However
-# there are a few taxa for which the p-value changes by up to 0.2, and one taxon for which
-# the p-value increases by more than 0.5. Let's find which taxon this change in p-value is 
-# coming from. 
+# there is one taxon where the p-value changes by more than 0.2. Let's find which taxon this 
+# change in p-value is coming from. 
 
 hyp_results_comparison %>% 
-  filter(pvalues_e05 > 0.5 & pvalues < 0.25)
+  filter(abs(pvalue_diff) > 0.1) %>%
+  select(taxon, contains("p"))
 
-# These results are coming from Phylum MVP-21. Let's look closer at this Phylum! 
+# These results are coming from OD1. Let's look closer at this Phylum! 
 
-hyp_results_comparison %>%
-  filter(taxon == "MVP-21")
+hyp_results_comparison %>% 
+  filter(taxon == "OD1") %>%
+  select(taxon, contains("p"))
 
-# We can see that the p-value when epsilon = 0 is 0.06 and when epsilon = 0.05 the p-value is
-# 0.606. Why has this changed so much?
+# We can see that the p-value when epsilon = 0 is 0.518 and when epsilon = 0.05 the p-value is
+# 0.208. Let's look closer at this taxon.
 
-ggplot(soil_df, aes(x = seq_depth, y = `MVP-21`, col = soil_add)) + 
+ggplot(soil_df, aes(x = seq_depth, y = `OD1`, col = soil_add)) + 
   geom_jitter(height = 0.08, width = 0.00) + 
   theme_bw() + 
   labs(x = "Sequencing Depth",
        col = "Amendment",
-       title = "MVP-21 presence by sequencing depth") + 
+       title = "OD1 presence by sequencing depth") + 
   theme(plot.title = element_text(hjust = 0.5))
-
-# It turns out that out of the 119 samples, only 4 of them contain MVP-21. So, when we say
-# that epsilon = 0 there is no probability of observing a taxon when it is not actually there.
-# However, when we set epsilon = 0.05, we say that there is a 5% probability of observing a 
-# taxon given that it shouldn't be present. When we allow for this non-zero probability of 
-# falsly observing a taxon, our p-value for the relationship between soil amendments and 
-# the presence of MVP-21 increases because we are accounting for the possibility of erroneously
-# observing MVP-21 in the 4 samples that we observed them in. 
   
 # This is a case where doing a sensitivity analysis is a great idea! It shows us that while
 # the results for most taxa are robust to a change in epsilon, that is not the case for 
-# MVP-21 -- because this phylum was only detected in high depth samples. 
+# OD1. 
 
 # If we wanted to comprehensively understand the robustness of our results to varying degrees 
 # of contamination we could continue to dial up or dial down values of epsilon (probability 
