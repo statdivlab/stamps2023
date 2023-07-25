@@ -26,7 +26,7 @@ library(tidyverse)
 library(Matrix)
 library(remotes)
 library(monotone)
-install_github("https://github.com/statdivlab/radEmu")
+# install_github("https://github.com/statdivlab/radEmu")
 library(radEmu)
 
 
@@ -233,12 +233,13 @@ ch_study_obs <- which(metadata$Country %in% c("CHI"))
 
 # let's fit a model!
 # ... emuFit will talk at you a bit, but don't worry about it
-# ch_fit <-
-#   emuFit(Y = as.matrix(mOTU_table[ch_study_obs,
-#                                   which_mOTU_names]), 
-#          formula = ~ Group, 
-#          data = metadata[ch_study_obs, ]
-#   )
+emu_res <- emuFit(Y = as.matrix(mOTU_table[ch_study_obs,
+                                           which_mOTU_names]), 
+                  formula = ~ Group, 
+                  data = metadata[ch_study_obs, ], 
+                  run_score_tests = FALSE, 
+                  return_wald_p = TRUE
+)
 
 # instead of fitting radEmu, let's try some other methods!
 # start with ALDEx2
@@ -261,8 +262,6 @@ aldex.plot(x.all, type="MW", test="welch", xlab="Dispersion",
 library(ANCOMBC)
 
 # need to turn data into a phyloseq object
-
-# covariate data for chinese study 
 sam_dat <- phyloseq::sample_data(metadata[ch_study_obs, ])
 otus <- as.matrix(mOTU_table[ch_study_obs, which_mOTU_names])
 row.names(otus) <- row.names(sam_dat)
@@ -277,12 +276,46 @@ taxa_used <- which(full_names %in% res_names)
 full_p_val <- rep(NA, ncol(otus))
 full_p_val[taxa_used] <- ancom_res$res$p_val$GroupCRC
 
+# now try deseq2
+library(DESeq2)
+reads_pseudo <- reads
+reads_pseudo[reads == 0] <- 1
+dds <- DESeqDataSetFromMatrix(countData = reads_pseudo, 
+                              colData = metadata[ch_study_obs, ], 
+                              design = ~Group)
+deseq_res <- DESeq(dds)
+deseq_test_res <- results(deseq_res)
+deseq_p <- deseq_test_res$pvalue
+
 # compare results
 res_df <- data.frame(aldex = c(x.all$we.ep, NA),
-                     ancom = full_p_val)
-ggplot(res_df, aes(x = aldex, y = ancom)) + 
-  geom_point() + 
-  xlim(c(0, 1)) + 
-  ylim(c(0, 1)) + 
-  geom_abline(intercept = 0, slope = 1, color = "red")
-ggsave("")
+                     ancom = full_p_val,
+                     radEmu = emu_res$pval,
+                     deseq = deseq_p)
+GGally::ggpairs(res_df)
+ggsave("labs/radEmu/compare_plot.png")
+
+# 
+# g1 <- ggplot(res_df, aes(x = aldex, y = ancom)) + 
+#   geom_point() + 
+#   xlim(c(0, 1)) + 
+#   ylim(c(0, 1)) + 
+#   ggtitle("ALDEx2 and ANCOM-BC") + 
+#   theme(plot.title = element_text(hjust = 0.5)) + 
+#   geom_abline(intercept = 0, slope = 1, color = "red")
+# g2 <- ggplot(res_df, aes(x = aldex, y = radEmu)) + 
+#   geom_point() + 
+#   xlim(c(0, 1)) + 
+#   ylim(c(0, 1)) + 
+#   ggtitle("ALDEx2 and radEmu") + 
+#   theme(plot.title = element_text(hjust = 0.5)) + 
+#   geom_abline(intercept = 0, slope = 1, color = "red")
+# g3 <- ggplot(res_df, aes(x = ancom, y = radEmu)) + 
+#   geom_point() + 
+#   xlim(c(0, 1)) + 
+#   ylim(c(0, 1)) + 
+#   ggtitle("ANCOM-BC and radEmu") + 
+#   theme(plot.title = element_text(hjust = 0.5)) + 
+#   geom_abline(intercept = 0, slope = 1, color = "red")
+# gridExtra::grid.arrange(g1, g2, g3, nrow = 1)
+# 
