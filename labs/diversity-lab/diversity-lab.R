@@ -9,13 +9,19 @@
 
 library(speedyseq) # or library(phyloseq) if this doesn't work
 library(tidyverse)
-install.packages("gridExtra")
+if (!("gridExtra" %in% row.names(installed.packages()))) {
+  install.packages("gridExtra")
+}
 library(gridExtra)
 
 ## If you're on your own machine at home, you will need to install breakaway and DivNet.
 ## Here's how you can do this! 
-# remotes::install_github("adw96/breakaway")
-# remotes::install_github("adw96/DivNet")
+if (!("breakaway" %in% row.names(installed.packages()))) {
+  remotes::install_github("adw96/breakaway")
+}
+if (!("DivNet" %in% row.names(installed.packages()))) {
+  remotes::install_github("adw96/DivNet")
+}
 library(breakaway)
 library(DivNet)
 
@@ -85,7 +91,8 @@ data.frame("observed_richness" = (observed_phyloseq %>% summary)$estimate,
            "depth" = phyloseq::sample_sums(water_order), # Easter egg! Phyloseq's function to get depth
            "type" = water_order %>% sample_data %>% get_variable("SampleType")) %>%
   ggplot(aes(x = depth, y = observed_richness, color = type)) +
-  geom_point()
+  geom_point() + 
+  labs(x = "depth", y = "observed richness", color = "sample type")
 
 # So what do we see? We see that some of our Freshwater (creek) samples which have
 # the highest observed richness also have the highest sequencing depth and that our
@@ -223,6 +230,10 @@ dv_water_order$shannon %>%
 plot(dv_water_order$shannon,
      water_order,
      col = "SampleType")
+
+# Note that although there don't appear to be error bars in the figure, if you
+# check out `dv_water_order$shannon` in your console you'll see that the 
+# confidence intervals are just very very small. 
 
 # Let's compare this to the naive approach of just "plugging in" the observed
 # proportions to the Shannon diversity formula
