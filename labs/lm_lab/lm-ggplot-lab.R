@@ -2,8 +2,9 @@
 ## prepared by Amy Willis & Sarah Teichman
 
 # In this lab, we'll practice running linear regression with the function `lm`. 
-# We'll also manipulate our data with the `tidyverse` plot our data with `ggplot`.
-# There will be a few intentional errors here for you to fix. If a line of coding
+# We'll also manipulate our data with the functions from the `tidyverse` and plot 
+# our data with `ggplot`.
+# There will be a few intentional errors here for you to fix. If a line of code
 # isn't working, think about how you can fix it to make it work. 
 
 # Let's begin by loading in the tidyverse, which we'll need for this tutorial.
@@ -18,8 +19,8 @@ library(tidyverse)
 # from study participants. More information can be found here: 
 # https://journals.asm.org/doi/full/10.1128/mSystems.00296-20?rfr_dat=cr_pub++0pubmed&url_ver=Z39.88-2003&rfr_id=ori%3Arid%3Acrossref.org&
 
-ddpcr <- read_csv("https://raw.githubusercontent.com/statdivlab/stamps2022/main/Sunday-afternoon/labs/lm_lab/data/ddPCR.csv")
-meta <- read_csv("https://raw.githubusercontent.com/statdivlab/stamps2022/main/Sunday-afternoon/labs/lm_lab/data/meta_data.csv")
+ddpcr <- read_csv("https://raw.githubusercontent.com/statdivlab/stamps2023/main/labs/lm_lab/data/ddPCR.csv")
+meta <- read_csv("https://raw.githubusercontent.com/statdivlab/stamps2023/main/labs/lm_lab/data/meta_data.csv")
 
 # ------------------------ exploring the data ---------------------
 
@@ -175,8 +176,8 @@ summary(mod_type)
 
 # How do we interpret this output? 
 
-# We have two rows. The first row corresponds with the intercept of our model.
-# Following rows correspond with covariates. 
+# We have two rows in the "Coefficients" table. The first row corresponds with 
+# the intercept of our model. The following rows correspond with covariates. 
 
 # We have 4 columns. The first column gives the estimate of the coefficient for 
 # the intercept or covariate on the row. The second column gives the standard error
