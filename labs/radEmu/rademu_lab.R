@@ -1,7 +1,3 @@
-### radEmu lab
-### David Clausen
-### July 24th, 2022
-
 
 ### In this lab we'll explore a dataset published by Wirbel et al. (2019).
 ### (https://www.nature.com/articles/s41591-019-0406-6)
@@ -25,10 +21,8 @@
 library(tidyverse)
 library(Matrix)
 library(remotes)
-library(monotone)
 install_github("https://github.com/statdivlab/radEmu")
 library(radEmu)
-
 
 
 metadata <-
@@ -57,7 +51,6 @@ metadata %>%
 mOTU_table <-
   read_csv("https://raw.githubusercontent.com/statdivlab/stamps2022/main/Sunday-afternoon/labs/rademu_lab/wirbel_et_al_mOTUs.csv")
 
-
 # let's take a peek at the mOTU table
 head(mOTU_table)
 # how are the columns in this object named?
@@ -74,7 +67,7 @@ mOTU_table <- mOTU_table %>%
   as.matrix() %>% # make this whole deal a matrix
   t() %>% # transpose so that rows are samples and columns are mOTU names
   (Matrix::Matrix) #now make our transposed matrix into a ~fancy~ Matrix
-# using the Matrix package
+                   # using the Matrix package
 
 ### we need to keep track of which columns of our transposed mOTU_table
 ### correspond to which mOTUs, so let's name them!
@@ -90,37 +83,12 @@ dim(metadata)
 ### but you can take my word that we don't need the extra observations
 ### let's get rid of them!
 
-# fun fact: I (David) use sapply a lot
-# apparently very few other people do
-# in any case, let me talk you through what this sapply is doing:
-rows_in_metadata <- sapply( #sapply basically says "take X and do Y to each
-  #element of X
-  rownames(mOTU_table), # <- this is X, so
-  #so far we've told sapply that we want it to do
-  #something using the row names of mOTU_table
-  #(the row names here tell us what sample each row
-  #of the mOTU table contains observations on)
-  #this next bit specifies what to do with the row names
-  #namely, we're asking it to tell us if each row name
-  #exists inside metadata$Sample_ID -- in other words,
-  #to tell us which samples we have mOTU data for we
-  #also have metadata for
-  function(x) x %in% metadata$Sample_ID # <- this is Y
-)
+rows_in_metadata <- sapply(rownames(mOTU_table),
+                           function(x) x %in% metadata$Sample_ID)
 
 
-#so now that we've used everyone's favorite R function, sapply,
-#we have an object "rows_in_metadata" that tells us which rows
-#of mOTU_table correspond to rows in our metadata
-#we'll use this to subset mOTU_table so we have data for the same
-#participants in metadata and mOTU_table
 mOTU_table <- mOTU_table[rows_in_metadata,]
-
-#note: I'm using base R to do this -- you could also use tidyverse
-#... which some of my colleagues might prefer
-
-
-### in any case, let's check our dimensions again now
+### let's check our dimensions again now
 dim(mOTU_table)
 dim(metadata)
 
@@ -142,8 +110,6 @@ order_for_metadata <- sapply(rownames(mOTU_table),
 plot(order_for_metadata)
 
 # yay
-# again -- I'm using base R here. You could also use inner_join() to do the
-# same thing (I am told)
 
 ### if we look at the first few rownames of mOTU_table and sample_IDs
 ### in metadata, we see the order also matches
@@ -168,20 +134,9 @@ for(i in 1:nrow(mOTU_table)){
   mOTU_table[i,] <- mOTU_table[i,]*metadata$Library_Size[i]
 }
 
-mOTU_table[1:5, 1:5]
-
 ### now we'll pull out some taxa we might be interested in to fit models on
 ### (we can also fit a model to all mOTUs, but this takes longer)
-#yay another sapply
-fuso <- sapply(mOTU_names, #go through the names of our mOTUs
-               #and for each name:
-               
-               function(x) grepl("Fusobac", #see if the name contains the string
-                                 #"Fusobac"
-                                 #if so, return TRUE; otherwise FALSE
-                                 x,
-                                 fixed = TRUE))
-#now do the same thing for some other genera:
+fuso <- sapply(mOTU_names,function(x) grepl("Fusobac",x,fixed = TRUE))
 prevo <- sapply(mOTU_names,function(x) grepl("Prevotella ",x,fixed = TRUE))
 porph <-  sapply(mOTU_names,function(x) grepl("Porphyromonas ",x,fixed = TRUE))
 clostr <- sapply(mOTU_names, function(x) grepl("Clostridium",x, fixed = TRUE))
@@ -202,31 +157,21 @@ unique(metadata$Group)
 metadata$Group <- factor(metadata$Group,
                          levels = c("CTR","CRC"))
 
-### we'll stick to the genera Eubacterium, Porphyromonas,
-### and Fusobacterium for now
-# store names of the mOTUs in these genera
-restricted_mOTU_names <- mOTU_names[eubact|porph|fuso]
 
-# Figure out which columns of mOTU_table contain observations in
-# Eubacterium, Porphyromonas, or Fusobacterium
-which_mOTU_names <- which(eubact|porph|fuso)
 
 # Among just the mOTUs in Eubacterium, Porphyromonas, or Fusobacterium,
 # flag those that are in Eubacterium
-eubact_restr <- sapply(restricted_mOTU_names,
-                       function(x) grepl("Eubact",x, fixed = TRUE))
+eubact_restr <- sapply(restricted_mOTU_names, function(x) grepl("Eubact",x, fixed = TRUE))
 
-### Ooh ok now we're going to define the constraint we'll use with radEmu
-### For now, we'll make this a median over Eubacterium
-### (so we require the median of effects we estimate for Eubacterium to be
-### zero
 
-# fun question time: how does using this constraint affect the interpretation of
-# our estimates?
+### we'll stick to the genera Eubacterium, Porphyromonas, Faecalibacteria,
+### and Fusobacterium for now
+# store names of the mOTUs in these genera
+restricted_mOTU_names <- mOTU_names[eubact|porph|fuso|faecali]
 
-constraint_fn <- function(x){median(x[eubact_restr])}
-
-### Great! We're ready to start fitting models!
+# Figure out which columns of mOTU_table contain observations in
+# Eubacterium, Porphyromonas, Faecalibacteria, or Fusobacterium
+which_mOTU_names <- which(eubact|porph|fuso|faecali)
 
 # We'll begin with data from a Chinese study Wirbel et al. analyzed
 ch_study_obs <- which(metadata$Country %in% c("CHI"))
@@ -234,237 +179,142 @@ ch_study_obs <- which(metadata$Country %in% c("CHI"))
 # let's fit a model!
 # ... emuFit will talk at you a bit, but don't worry about it
 ch_fit <-
-  emuFit(Y = as.matrix(mOTU_table[ch_study_obs,
-                                  which_mOTU_names]), 
-         formula = ~ Group, 
-         data = metadata[ch_study_obs, ]
-  )
-# ch_fit <-
-#   emuFit(~ Group, # this is a formula telling radEmu what predictors to
-#          # use in fitting a model
-#          # we are using Group -- i.e., an indicator for which
-#          # participants have CRC diagnoses and which do not
-#          # as our predictor
-#          covariate_data = metadata[ch_study_obs, #ch_study obs = we're
-#                                    # only looking at rows
-#                                    # containing observations
-#                                    # from the Chinese study
-#          ], # covariate_data
-#          # contains our predictor
-#          # data
-#          Y = mOTU_table[ch_study_obs,
-#                         which_mOTU_names], #which_mOTU_names = we're limiting the taxa
-#          # we're looking at to Eubacterium,
-#          # Porphyromonas, and Fusobacterium
-#          # (which_mOTU_names was constructed above)
-#          
-#          constraint_fn = constraint_fn, #make sure radEmu is using our
-#          #constraint function
-#          tolerance = 1,
-#          method = "FL",
-#          verbose= TRUE,
-#          reweight = TRUE)
-
-### this will take a moment and emuFit will not talk to you (computation
-### is happening in parallel in environments we don't have direct access to)
-
-ch_fit_cis <- emuCI(emuMod = ch_fit, #we have to give emuCI a fitted
-                    #radEmu model
-                    nboot = 100, # radEmu uses a bootstrap to form confidence
-                    # intervals -- in a publication, we recommend
-                    # more bootstrap iterations (1000 is great)
-                    parallel = TRUE, # speed up by
-                    # doing bootstrap fits in parallel?
-                    ncore = 6) #how many cores to parallelize over?
+    emuFit(formula = ~ Group, # this is a formula telling radEmu what predictors to
+                    # use in fitting a model
+                    # we are using Group -- i.e., an indicator for which
+                    # participants have CRC diagnoses and which do not
+                    # as our predictor
+           data = metadata[ch_study_obs, #ch_study obs = we're
+                                                    # only looking at rows
+                                                    # containing observations
+                                                    # from the chinese study
+                                     ], # data
+                                                     # contains our predictor
+                                                     # data
+           Y = as.matrix(mOTU_table[ch_study_obs,which_mOTU_names]),
+           run_score_tests = FALSE) #which_mOTU_names = we're limiting the taxa
+                                       # we're looking at to Eubacterium, Faecalibacterium,
+                                       # Porphyromonas, and Fusobacterium
+                                       # (which_mOTU_names was constructed above)
 
 ### Ok we have estimates and confidence intervals for the group effect
 ### Let's take a look:
 
-ch_fit_cis%>%
-  filter(row ==2) %>%
-  mutate(taxon = factor(restricted_mOTU_names,
-                        levels = mOTU_names[c(
-                          which(eubact),which(porph),which(fuso)
-                        )]
-  )) %>%
-  mutate(Genus = sapply(taxon, function(x) ifelse(
-    grepl("Eubact",x,fixed = TRUE),"Eubacterium",
-    ifelse(grepl("Fuso",x,fixed = TRUE),
-           "Fusobacterium",
-           "Porphyromonas")
-  ))) %>%
-  ggplot() + geom_point(aes(x = taxon, y = estimate,
-                            color = Genus),
-                        size = .5) +
-  geom_errorbar(aes(x = taxon, ymin = lower, ymax = upper,
-                    color = Genus),
-                width = .25)+
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+ch_fit %>%
+  mutate(Genus = sapply(category,
+                        function(x) ifelse(strsplit(x," ",fixed = TRUE)[[1]][1] %in% c("unknown","uncultured"),
+                                       strsplit(x," ",fixed = TRUE)[[1]][2],
+                                       strsplit(x," ",fixed = TRUE)[[1]][1]))) %>%
+  mutate(category = factor(category,levels = category[order(Genus)])) %>%
+    ggplot() + geom_point(aes(x = category, y = estimate,color = Genus),
+                          size = .5) +
+    geom_errorbar(aes(x = category, ymin = lower, ymax = upper,color = Genus),
+                  width = .25)+
+    theme_bw() +
+    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+    coord_cartesian(ylim = c(-5,15))
 
-### The y-axis is a bit wild because of large uncertainty in
-### the estimate for one mOTU
-### We can fix this with coord_cartesian()
+## Interestingly, we estimate a meta-mOTU ""unknown Eubacterium [meta_mOTU_v2_7116]" 
+## assigned to Eubacteria
+## to have a much higher ratio of concentrations (comparing CRC group to control) 
+## than is typical across the mOTUs we included in this analysis.
 
-### here's the help information for this function:
-?coord_cartesian
+## The confidence interval for this effect does not include zero -- but(!!!) 
+## the kind of confidence interval that is returned by default by emuFit 
+## is not extremely reliable when counts are very skewed or sample size is 
+## small-to-moderate. 
 
-### thoughts on how to make the y scale more reasonable
-### in the plot below?
+## To investigate further, let's run a robust score test, 
+## which is more reliable in these settings (but also takes more time because 
+## apparently we can't have nice things). For comparison, we'll also test 
+## Fusobacterium Nucleatum, which we also estimate to have a much larger
+## ratio of concentrations across groups than is typical among the taxa we 
+## included in this model fit.
 
-ch_fit_cis%>%
-  filter(row ==2) %>%
-  mutate(taxon = factor(restricted_mOTU_names, #define "taxon" to be a factor
-                        levels = mOTU_names[c( #put the levels of this factor
-                          #in a particular order:
-                          which(eubact), #Eubacterium mOTUs first
-                          which(porph),  #then Porphyromonas
-                          which(fuso)    #then Fusobacterium
-                        )] #(specifying the order of the levels puts the
-                        #x-axis of the plot below in prettier order)
-  )) %>%
-  mutate(Genus = sapply(taxon, #sapply! to define a new variable: Genus
-                        function(x) ifelse(
-                          grepl("Eubact",x,fixed = TRUE), #if the mOTU contains
-                          #the string "Eubact",
-                          "Eubacterium", #return genus Eubacterium
-                          ifelse(grepl("Fuso",x,fixed = TRUE), #otherwise if it contains string "Fuso",
-                                 "Fusobacterium", #return genus Fusobacterium
-                                 "Porphyromonas") #otherwise return genus Porphyromonas
-                        ))) %>%
-  ggplot() + geom_point(aes(x = taxon, y = estimate,
-                            color = Genus),
-                        size = .5) +
-  geom_errorbar(aes(x = taxon, ymin = lower, ymax = upper,
-                    color = Genus),
-                width = .25)+
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  coord_cartesian( # here for you to fill in woooo
-    
-  )
+robust_score_tests_eubacterium_mOTU_and_f_nucleatum <- 
+  emuFit(formula = ~ Group,
+       data = metadata[ch_study_obs, ],
+       B = ch_fit,
+       test_kj = data.frame(k = c(2,2), j = c(3,36)), # j = 3 is F. nucleatum; 
+                                                      # j = 36 is the Eubacterium meta mOTU
+                                                      # (you can see this in output from the model we already fit)
+ 
+       Y = as.matrix(mOTU_table[ch_study_obs,which_mOTU_names]))
 
-# hint: use the Zoom button above the plot to pop it out into a larger window
+## Let's take a look at the test output:
+robust_score_tests_eubacterium_mOTU_and_f_nucleatum
 
-# ok now that (hopefully) the plot is easier to read...
-# what patterns do you see across mOTUs?
+## p = 0.31!!! 
 
-# many of the estimates for Eubacterium are close to zero -- why?
+## Does this make sense? Let's look at the Eubacterium mOTU counts alongside CRC group:
+cbind(mOTU_table[ch_study_obs,"unknown Eubacterium [meta_mOTU_v2_7116]"],
+      as.character(metadata$Group[ch_study_obs]))
+
+## We only detect this meta-mOTU in a single sample in the Chinese study cohort!
+## So, yes -- it makes sense that our test returns a relatively large p-value
+
+## Now let's look at F. nucleatum:
+cbind(mOTU_table[ch_study_obs,"Fusobacterium nucleatum s. nucleatum [ref_mOTU_v2_0777]"],
+           as.character(metadata$Group[ch_study_obs]))
+
+# this also makes sense given what we found --  F. nucleatum shows up in a sizeable minority of 
+# CRC cases in relatively high counts, whereas we detect it (by Wirbel et al's standards)
+# in only one control participant
 
 
-### Let's look at a French study Wirbel et al. analyized
-# -- do we see similar patterns?
-fr_study_obs <- which(metadata$Country %in% c("FRA"))
+## We can run score tests for all taxa by setting run_score_tests = TRUE
+## This is the kind of thing you might want to let run overnight, though -- 
+## it will probably take a bit. 
 
-fr_fit <-
-  emuFit(~ Group,
-         covariate_data = metadata[fr_study_obs,],
-         Y = mOTU_table[fr_study_obs,which_mOTU_names],
-         tolerance = 1,
-         constraint_fn = constraint_fn,
-         method = "FL", # use Firth-penalized likelihood
-         verbose= TRUE,
-         reweight = TRUE) # tell us what's happening during optimization
+## For the time being, you would be justified in moving on to the next section 
+## without running this
 
-### this will take a moment
-
-fr_fit_cis <- emuCI(emuMod = fr_fit,
-                    nboot = 100,
-                    parallel = TRUE,
-                    ncore = 6)
-
-fr_fit_cis%>%
-  filter(row ==2) %>%
-  mutate(taxon = factor(restricted_mOTU_names,
-                        levels = mOTU_names[c(
-                          which(eubact),which(porph),which(fuso)
-                        )]
-  )) %>%
-  mutate(Genus = sapply(taxon, function(x) ifelse(
-    grepl("Eubact",x,fixed = TRUE),"Eubacterium",
-    ifelse(grepl("Fuso",x,fixed = TRUE),
-           "Fusobacterium",
-           "Porphyromonas")
-  ))) %>%
-  ggplot() + geom_point(aes(x = taxon, y = estimate,
-                            color = Genus),
-                        size = .5) +
-  geom_errorbar(aes(x = taxon, ymin = lower, ymax = upper,
-                    color = Genus),
-                width = .25)+
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  coord_cartesian(ylim = c(-5,14))
+test_all <- 
+  emuFit(formula = ~ Group, # this is a formula telling radEmu what predictors to
+         # use in fitting a model
+         # we are using Group -- i.e., an indicator for which
+         # participants have CRC diagnoses and which do not
+         # as our predictor
+         data = metadata[ch_study_obs, #ch_study obs = we're
+                         # only looking at rows
+                         # containing observations
+                         # from the chinese study
+         ],
+         B = ch_fit,# covariate_data
+         # contains our predictor
+         # data
+         Y = as.matrix(mOTU_table[ch_study_obs,which_mOTU_names]),
+         run_score_tests = TRUE)
 
 
-### Let's look at those together
-rbind(
-  ch_fit_cis %>%
-    mutate(study = "Chinese"),
-  fr_fit_cis %>%
-    mutate(study = "French")
-) %>%
-  filter(row ==2) %>%
-  mutate(taxon = factor(rep(restricted_mOTU_names,2),
-                        levels = mOTU_names[c(
-                          which(eubact),which(porph),which(fuso)
-                        )]
-  )) %>%
-  mutate(Genus = sapply(taxon, function(x) ifelse(
-    grepl("Eubact",x,fixed = TRUE),"Eubacterium",
-    ifelse(grepl("Fuso",x,fixed = TRUE),
-           "Fusobacterium",
-           "Porphyromonas")
-  ))) %>%
-  ggplot() + geom_point(aes(x = taxon, y = estimate,
-                            group = study,
-                            color = Genus),
-                        size = .5) +
-  geom_errorbar(aes(x = taxon, ymin = lower, ymax = upper,
-                    group = study,
-                    linetype = study,
-                    color = Genus),
-                width = .25)+
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  coord_cartesian(ylim = c(-5,14))
+  ### Let's look at a French study Wirbel et al. analyized
+  # -- do we see similar patterns?
+  fr_study_obs <- which(metadata$Country %in% c("FRA"))
 
-### Hard to read overlapping CIs -- let's fix
+  fr_fit <-
+    emuFit(~ Group,
+           data = metadata[fr_study_obs, 
+           ], 
+           Y = as.matrix(mOTU_table[fr_study_obs,which_mOTU_names]),
+           run_score_tests = FALSE)
 
-rbind(
-  ch_fit_cis %>%
-    mutate(study = "Chinese"),
-  fr_fit_cis %>%
-    mutate(study = "French")
-) %>%
-  filter(row ==2) %>%
-  mutate(taxon = factor(rep(restricted_mOTU_names,2),
-                        levels = mOTU_names[c(
-                          which(eubact),which(porph),which(fuso)
-                        )]
-  )) %>%
-  mutate(Genus = sapply(taxon, function(x) ifelse(
-    grepl("Eubact",x,fixed = TRUE),"Eubacterium",
-    ifelse(grepl("Fuso",x,fixed = TRUE),
-           "Fusobacterium",
-           "Porphyromonas")
-  ))) %>%
-  ggplot() + geom_point(aes(x = taxon, y = estimate,
-                            group = study,
-                            color = Genus),
-                        position = position_dodge(.25), #the magic fix
-                        #for overlapping CIs
-                        size = .5) +
-  geom_errorbar(aes(x = taxon, ymin = lower, ymax = upper,
-                    group = study,
-                    linetype = study,
-                    color = Genus),
-                position = position_dodge(.25), #use position_dodge() here too
-                #so error bars are adjusted too
-                width = .25)+
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  coord_cartesian(ylim = c(-5,14))
+ 
+## Let's compare to the results on the Chinese cohort:
+  pd <- position_dodge2(width = 0.5)
+  ch_fit$country <- "China"
+  fr_fit$country <- "France"
+  rbind(ch_fit,fr_fit) %>%
+    mutate(Genus = sapply(category,
+                          function(x) ifelse(strsplit(x," ",fixed = TRUE)[[1]][1] %in% c("unknown","uncultured"),
+                                             strsplit(x," ",fixed = TRUE)[[1]][2],
+                                             strsplit(x," ",fixed = TRUE)[[1]][1]))) %>%
+    mutate(category = factor(category,levels = unique(category[order(Genus)]))) %>%
+    ggplot() + 
+    geom_point(aes(x = category,y = estimate,color = Genus),position = pd,size = 0.5) + 
+    geom_errorbar(aes(x = category,ymin = lower, ymax = upper,color = Genus,linetype = country),position = pd) + 
+    theme_bw() + 
+    theme(axis.text.x = element_text(angle = 45, size = 6,hjust = 1))
+
 
 
 ### In the Chinese study, samples were taken from patients undergoing
@@ -473,109 +323,27 @@ rbind(
 ### by including timing relative to colonoscopy as a predictor in our model
 ### (Why?)
 
-ch_fit_timing <-
-  emuFit(~ Group + Sampling_rel_to_colonoscopy,
-         covariate_data = metadata[ch_study_obs,],
-         Y = mOTU_table[ch_study_obs,which_mOTU_names],
-         tolerance = 1,
-         constraint_fn = constraint_fn,
-         method = "FL", # use Firth-penalized likelihood
-         verbose= TRUE,
-         reweight = TRUE)
+ch_fit_timing <- 
+  emuFit(formula = ~ Group + Sampling_rel_to_colonoscopy, 
+         data = metadata[ch_study_obs, 
+         ], 
+         Y = as.matrix(mOTU_table[ch_study_obs,which_mOTU_names]),
+         run_score_tests = FALSE)
 
 ### Error :(
-### "Matrices must have same number of rows for arithmetic" -- seems like
+### "Error in soln_mat %*% Y_start[, j, drop = FALSE] : non-conformable arguments" -- seems like
 ### we might not be giving emuFit inputs that have the correct dimensions
 
-### On that theory, let's look at "Sampling_rel_to_colonoscopy"
 metadata$Sampling_rel_to_colonoscopy[ch_study_obs]
-### What do you notice about the values of this variable?
-
-
-
-
-
-
-
-
-### ... spoiler below
-
-
-
-
-
-
-
-
-
-### that's right! there is an NA in Sampling_rel_to_colonoscopy
-### let's record which observations we have for which
-#### Sampling_rel_to_colonoscopy is not NA
 timing_available <- !is.na(metadata$Sampling_rel_to_colonoscopy[ch_study_obs])
+# a-ha: one participant is missing sampling time data. We'll exclude them for now.
 
-###... and fit a model using only those observations
-ch_fit_timing <-
-  emuFit(~ Group + Sampling_rel_to_colonoscopy,
-         covariate_data = metadata[ch_study_obs,][timing_available, #only rows
-                                                  # with non-NA values of
-                                                  # Sampling_rel_to_colonoscopy
-         ],
-         Y = mOTU_table[ch_study_obs,which_mOTU_names][timing_available, #same
-                                                       # thing except now we're
-                                                       # subsetting an already-
-                                                       # subsetted version of
-                                                       # mOTU_table...
-                                                       # I write the most elegant code
-         ],
-         tolerance = 1,
-         constraint_fn = constraint_fn,
-         method = "FL",
-         verbose= TRUE,
-         reweight = TRUE)
-
-# this may take several minutes
-chi_fit_timing_cis <- emuCI(emuMod = ch_fit_timing,
-                            nboot = 100,
-                            parallel = TRUE,
-                            ncore = 6)
-
-### Let's plot the timing-adjusted and unadjusted fits together
-rbind(
-  ch_fit_cis %>%
-    mutate(adjustment = "No adjustment"),
-  chi_fit_timing_cis %>%
-    mutate(adjustment = "Adjustment for timing")
-) %>%
-  filter(row ==2) %>%
-  mutate(taxon = factor(rep(restricted_mOTU_names,2),
-                        levels = mOTU_names[c(
-                          which(eubact),which(porph),which(fuso)
-                        )]
-  )) %>%
-  mutate(Genus = sapply(taxon, function(x) ifelse(
-    grepl("Eubact",x,fixed = TRUE),"Eubacterium",
-    ifelse(grepl("Fuso",x,fixed = TRUE),
-           "Fusobacterium",
-           "Porphyromonas")
-  ))) %>%
-  ggplot() + geom_point(aes(x = taxon, y = estimate,
-                            group = adjustment,
-                            color = Genus),
-                        position = position_dodge(.25),
-                        size = .5) +
-  geom_errorbar(aes(x = taxon, ymin = lower, ymax = upper,
-                    group = adjustment,
-                    linetype = adjustment,
-                    color = Genus),
-                position = position_dodge(.25),
-                width = .25)+
-  theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
-  coord_cartesian(ylim = c(-5,14))
-
-### seems like point estimates and CIs are pretty similar for adjusted
-### and unadjusted fits -- does this mean we don't need to worry about
-### the impact of timing of sample collection? Why or why not?
+ch_fit_timing <- 
+  emuFit(formula = ~ Group + Sampling_rel_to_colonoscopy, 
+         data = metadata[ch_study_obs, 
+         ][timing_available,], 
+         Y = as.matrix(mOTU_table[ch_study_obs,which_mOTU_names][timing_available,]),
+         run_score_tests = FALSE)
 
 ### We can also fit a single model to data from multiple studies
 
@@ -583,48 +351,51 @@ fr_ch_study_obs <- which(metadata$Country %in% c("CHI","FRA"))
 
 fr_ch_fit <-
   emuFit(~ Group + Country,
-         covariate_data = metadata[fr_ch_study_obs,],
-         Y = mOTU_table[fr_ch_study_obs,which_mOTU_names],
-         tolerance = 1,
-         constraint_fn = constraint_fn,
-         method = "FL", # use Firth-penalized likelihood
-         verbose= TRUE,
-         reweight = TRUE) # tell us what's happening during optimization
+         data = metadata[fr_ch_study_obs,],
+         Y = as.matrix(mOTU_table[fr_ch_study_obs,which_mOTU_names]),
+         run_score_tests = FALSE)# tell us what's happening during optimization
 
-### this will take a moment (longer than previous fits):
 
-fr_ch_fit_cis <- emuCI(emuMod = fr_ch_fit,
-                       nboot = 100,
-                       parallel = TRUE,
-                       ncore = 6)
-
-## Let's look at results
-fr_ch_fit_cis %>%
-  filter(row ==2) %>%
-  mutate(taxon = factor(restricted_mOTU_names,
-                        levels = mOTU_names[c(
-                          which(eubact),which(porph),which(fuso)
-                        )]
-  )) %>%
-  mutate(Genus = sapply(taxon, function(x) ifelse(
-    grepl("Eubact",x,fixed = TRUE),"Eubacterium",
-    ifelse(grepl("Fuso",x,fixed = TRUE),
-           "Fusobacterium",
-           "Porphyromonas")
-  ))) %>%
-  ggplot() + geom_point(aes(x = taxon, y = estimate,
-                            color = Genus),
+fr_ch_fit %>%
+  mutate(Genus = sapply(category,
+                        function(x) ifelse(strsplit(x," ",fixed = TRUE)[[1]][1] %in% c("unknown","uncultured"),
+                                           strsplit(x," ",fixed = TRUE)[[1]][2],
+                                           strsplit(x," ",fixed = TRUE)[[1]][1]))) %>%
+  filter(covariate == "GroupCRC") %>% # we only want CRC coefficients, not country coefficients
+  mutate(category = factor(category,levels = unique(category[order(Genus)]))) %>%
+  ggplot() + geom_point(aes(x = category, y = estimate,color = Genus),
                         size = .5) +
-  geom_errorbar(aes(x = taxon, ymin = lower, ymax = upper,
-                    color = Genus),
+  geom_errorbar(aes(x = category, ymin = lower, ymax = upper,color = Genus),
                 width = .25)+
   theme_bw() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_cartesian(ylim = c(-5,15))
 
 
 ### Notice that we didn't include Sampling_rel_to_colonoscopy in this regression
 ### (Optional exercise: fit the model above with Sampling_rel_to_colonoscopy
 ### added to the model)
-### (Well, everything is optional -- you can fit a model adjusting for age or
-### BMI as well. Up to you!)
+
+## You can also fit the model to all data from all countries
+all_country_fit <-
+  emuFit(~ Group + Country,
+         data = metadata,
+         Y = as.matrix(mOTU_table[,which_mOTU_names]),
+         run_score_tests = FALSE)
+
+
+all_country_fit %>%
+  mutate(Genus = sapply(category,
+                        function(x) ifelse(strsplit(x," ",fixed = TRUE)[[1]][1] %in% c("unknown","uncultured"),
+                                           strsplit(x," ",fixed = TRUE)[[1]][2],
+                                           strsplit(x," ",fixed = TRUE)[[1]][1]))) %>%
+  filter(covariate == "GroupCRC") %>% # we only want CRC coefficients, not country coefficients
+  mutate(category = factor(category,levels = unique(category[order(Genus)]))) %>%
+  ggplot() + geom_point(aes(x = category, y = estimate,color = Genus),
+                        size = .5) +
+  geom_errorbar(aes(x = category, ymin = lower, ymax = upper,color = Genus),
+                width = .25)+
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  coord_cartesian(ylim = c(-5,15))
 
