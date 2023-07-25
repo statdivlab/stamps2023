@@ -19,8 +19,8 @@ library(tidyverse)
 # from study participants. More information can be found here: 
 # https://journals.asm.org/doi/full/10.1128/mSystems.00296-20?rfr_dat=cr_pub++0pubmed&url_ver=Z39.88-2003&rfr_id=ori%3Arid%3Acrossref.org&
 
-ddpcr <- read_csv("https://raw.githubusercontent.com/statdivlab/stamps2023/main/labs/lm_lab/data/ddPCR.csv")
-meta <- read_csv("https://raw.githubusercontent.com/statdivlab/stamps2023/main/labs/lm_lab/data/meta_data.csv")
+ddpcr <- read_csv("https://raw.githubusercontent.com/statdivlab/stamps2023/main/labs/lm-lab/data/ddPCR.csv")
+meta <- read_csv("https://raw.githubusercontent.com/statdivlab/stamps2023/main/labs/lm-lab/data/meta_data.csv")
 
 # ------------------------ exploring the data ---------------------
 
