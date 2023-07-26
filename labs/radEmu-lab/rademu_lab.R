@@ -252,30 +252,205 @@ cbind(mOTU_table[ch_study_obs,"Fusobacterium nucleatum s. nucleatum [ref_mOTU_v2
 # CRC cases in relatively high counts, whereas we detect it (by Wirbel et al's standards)
 # in only one control participant
 
+# We could run robust score tests for every taxon, (there is code below), but we 
+# will not now because it would take hours to run. 
+
+# How do these results relate to differential abundance testing in other packages?
+# Note that each software will be testing different hypotheses with different
+# models and different estimators. 
+
+# Run ALDEx2
+
+# ALDEx2 is built to analyze RNA-seq data but can be used for 16S or shotgun data
+# as well. It uses a Dirichlet-multinomial model to infer abundance from counts.
+# It implements several tests, including a t test on abundance data transformed 
+# using a centered log ratio transformation. 
+
+if (!require("BiocManager", quietly = TRUE))
+  install.packages("BiocManager")
+if (!("ALDEx2" %in% row.names(installed.packages()))) {
+  BiocManager::install("ALDEx2")
+}
+library(ALDEx2)
+
+# More information can be found in vignettes and in the papers cited here: 
+citation("ALDEx2")
+
+# vector of covariate data 
+covariate <- metadata$Group[ch_study_obs]
+# round our data because ALDEx2 gets mad when the abundance inputs are not integers
+# swap rows and columns (ALDEx2 requires samples as columns)
+reads <- round(t(as.matrix(mOTU_table[ch_study_obs, which_mOTU_names])))
+# run clt and then t test 
+aldex_res <- aldex(reads, covariate, mc.samples=500, test="t", effect=TRUE,
+               include.sample.summary=FALSE, denom="all", verbose=FALSE)
+### TO-DO: make a plot from these results?? 
+
+# let's check out the p-values from ALDEx2
+aldex_pvals <- aldex_res$we.ep
+
+# although we have 47 taxa we are testing, we only have 46 p-values from 
+# ALDEx2
+tail(rowSums(reads))
+
+# This is because we have a single taxon (unknown Porphyromonas [meta_mOTU_v2_777])
+# that is not observed in any of the samples we are considering. 
+# ALDEx2 is unable to estimate parameters for a taxon that does not appear in 
+# any samples, so this p-value is not included. 
+
+# therefore, append a NA to the end of p-value vector for this taxa
+aldex_pvals <- c(aldex_pvals, NA)
+
+# recall that we ran two robust score tests with radEmu and got the following:
+robust_score_tests_eubacterium_mOTU_and_f_nucleatum
+
+# check out the results for these two taxa from ALDEx2
+data.frame(pval = aldex_pvals,
+                       taxon = names(which_mOTU_names)) %>%
+  filter(taxon %in% c("Fusobacterium nucleatum s. nucleatum [ref_mOTU_v2_0777]",
+                      "unknown Eubacterium [meta_mOTU_v2_7116]"))
+
+# Similar to radEmu, the p-value for differential abundance with respect to Group
+# for the Fusobacterium is very small (< 0.05), and the p-value for the Eubacterium
+# is larger. 
+
+# Run ANCOM-BC
+
+# ANCOM-BC tests for differential abundance by estimating unknown sampling 
+# fractions (ratio of the expected absolute abundance of a taxon in a random 
+# sample to its absolute abundance in a unit volume of the ecosystem), correcting 
+# the bias induced by their differences through a log linear 
+# regression model including the estimated sampling fraction as an offset term, 
+# and identifying taxa that are differentially abundant with respect to the variable 
+# of interest.
+
+if (!("ANCOMBC" %in% row.names(installed.packages()))) {
+  BiocManager::install("ANCOMBC")
+}
+library(ANCOMBC)
+# we will also use phyloseq
+library(phyloseq)
+
+# More information can be found in vignettes and in the papers cited here: 
+citation("ANCOMBC")
+
+# ANCOM-BC requires certain data formats. One option is a phyloseq object
+# turn our data into phyloseq object
+sam_dat <- phyloseq::sample_data(metadata[ch_study_obs, ])
+otus <- as.matrix(mOTU_table[ch_study_obs, which_mOTU_names])
+row.names(otus) <- row.names(sam_dat)
+otu_tab <- phyloseq::otu_table(otus, taxa_are_rows = FALSE)
+phy_obj <- phyloseq::phyloseq(sam_dat, otu_tab)
+
+# run ANCOM-BC
+ancom_res <- ancombc(data = phy_obj, 
+                     formula = "Group")
+
+# which taxa do we have results for? 
+res_names <- ancom_res$res$p_val$taxon
+length(res_names)
+# We only have 35 p-values. This means there are 12 taxa that are not included.
+
+# let's look at some confidence intervals for the coefficient for the Group variable
+# TO-DO: fill this in tomorrow
+
+# finally lets look at our p-values
+full_names <- colnames(otus)
+taxa_used <- which(full_names %in% res_names)
+ancom_pvals <- rep(NA, ncol(otus))
+ancom_pvals[taxa_used] <- ancom_res$res$p_val$GroupCRC
+ancom_pvals
+
+# again, compare to robust score tests with radEmu 
+robust_score_tests_eubacterium_mOTU_and_f_nucleatum
+
+# check out the results for these two taxa from ALDEx2
+data.frame(pval = ancom_pvals,
+           taxon = names(which_mOTU_names)) %>%
+  filter(taxon %in% c("Fusobacterium nucleatum s. nucleatum [ref_mOTU_v2_0777]",
+                      "unknown Eubacterium [meta_mOTU_v2_7116]"))
+
+# Similar to radEmu, the p-value for differential abundance with respect to Group
+# for the Fusobacterium is very small (< 0.05). Unfortunately we were not able
+# to fit parameters and run a test for the Eubacterium, so we cannot compare to 
+# radEmu. 
+
+# Run DESeq2
+
+# DESeq2 estimates the variance-mean dependence in count data from high-throughput 
+# sequencing data (it was originally built for RNA-seq data) and tests for 
+# differential expression based on a model using the negative binomial distribution.
+
+if (!("DESeq2" %in% row.names(installed.packages()))) {
+  BiocManager::install("DESeq2")
+}
+library(DESeq2)
+
+# More information can be found in vignettes and in the papers cited here: 
+citation("DESeq2")
+
+# DESeq2 cannot run with abundances of 0
+reads_pseudo <- reads
+# add a pseudocount of 1 to each 0 in the abundance dataset 
+reads_pseudo[reads == 0] <- 1
+# create object to be used by DESeq2
+dds <- DESeqDataSetFromMatrix(countData = reads_pseudo, 
+                              colData = metadata[ch_study_obs, ], 
+                              design = ~Group)
+# run DESeq2
+deseq_res <- DESeq(dds)
+# obtain results
+deseq_test_res <- results(deseq_res)
+
+# TO-DO:  plot results in some way!!!!
+
+# save p-values
+deseq_pvals <- deseq_test_res$pvalue
+
+# again, compare to robust score tests with radEmu 
+robust_score_tests_eubacterium_mOTU_and_f_nucleatum
+
+# check out the results for these two taxa from ALDEx2
+data.frame(pval = deseq_pvals,
+           taxon = names(which_mOTU_names)) %>%
+  filter(taxon %in% c("Fusobacterium nucleatum s. nucleatum [ref_mOTU_v2_0777]",
+                      "unknown Eubacterium [meta_mOTU_v2_7116]"))
+
+# Once again, the p-value for differential abundance with respect to Group
+# for the Fusobacterium is very small (< 0.05), and the p-value for the Eubacterium
+# is larger and not significant at most alpha levels. 
+
+# This is the end of this lab. Feel free to continue below to fit different models,
+# and play around with radEmu, but several of these computations will take more
+# time to run. 
+
+
+
+
 
 ## We can run score tests for all taxa by setting run_score_tests = TRUE
 ## This is the kind of thing you might want to let run overnight, though -- 
 ## it will probably take a bit. 
 
 ## For the time being, you would be justified in moving on to the next section 
-## without running this
+## without running this. Uncomment each of the lines below to run this code. 
 
-test_all <- 
-  emuFit(formula = ~ Group, # this is a formula telling radEmu what predictors to
-         # use in fitting a model
-         # we are using Group -- i.e., an indicator for which
-         # participants have CRC diagnoses and which do not
-         # as our predictor
-         data = metadata[ch_study_obs, #ch_study obs = we're
-                         # only looking at rows
-                         # containing observations
-                         # from the chinese study
-         ],
-         B = ch_fit,# covariate_data
-         # contains our predictor
-         # data
-         Y = as.matrix(mOTU_table[ch_study_obs,which_mOTU_names]),
-         run_score_tests = TRUE)
+# test_all <- 
+#   emuFit(formula = ~ Group, # this is a formula telling radEmu what predictors to
+#          # use in fitting a model
+#          # we are using Group -- i.e., an indicator for which
+#          # participants have CRC diagnoses and which do not
+#          # as our predictor
+#          data = metadata[ch_study_obs, #ch_study obs = we're
+#                          # only looking at rows
+#                          # containing observations
+#                          # from the chinese study
+#          ],
+#          B = ch_fit,# covariate_data
+#          # contains our predictor
+#          # data
+#          Y = as.matrix(mOTU_table[ch_study_obs,which_mOTU_names]),
+#          run_score_tests = TRUE)
 
 
 ### Let's look at a French study Wirbel et al. analyized
