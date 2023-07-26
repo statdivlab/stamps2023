@@ -1,4 +1,3 @@
-
 ### In this lab we'll explore a dataset published by Wirbel et al. (2019).
 ### (https://www.nature.com/articles/s41591-019-0406-6)
 ### This is a meta-analysis of case-control studies, meaning that Wirbel
@@ -28,7 +27,7 @@ if (!("radEmu" %in% row.names(installed.packages()))) {
 library(radEmu)
 
 metadata <-
-  read_csv("https://raw.githubusercontent.com/statdivlab/stamps2023/main/labs/radEmu/data/wirbel_et_al_metadata.csv")
+  read_csv("https://raw.githubusercontent.com/statdivlab/stamps2023/main/labs/radEmu-lab/data/wirbel_et_al_metadata.csv")
 head(metadata)
 
 ### Let's see how many observations we have among cases ("CRC") and
@@ -51,7 +50,7 @@ metadata %>%
 
 ### Now let's load the mOTU table
 mOTU_table <-
-  read_csv("https://raw.githubusercontent.com/statdivlab/stamps2023/main/labs/radEmu/data/wirbel_et_al_mOTUs.csv")
+  read_csv("https://raw.githubusercontent.com/statdivlab/stamps2023/main/labs/radEmu-lab/data/wirbel_et_al_mOTUs.csv")
 
 # let's take a peek at the mOTU table
 head(mOTU_table)
@@ -69,7 +68,7 @@ mOTU_table <- mOTU_table %>%
   as.matrix() %>% # make this whole deal a matrix
   t() %>% # transpose so that rows are samples and columns are mOTU names
   (Matrix::Matrix) #now make our transposed matrix into a ~fancy~ Matrix
-                   # using the Matrix package
+# using the Matrix package
 
 ### we need to keep track of which columns of our transposed mOTU_table
 ### correspond to which mOTUs, so let's name them!
@@ -159,11 +158,6 @@ unique(metadata$Group)
 metadata$Group <- factor(metadata$Group,
                          levels = c("CTR","CRC"))
 
-# # Among just the mOTUs in Eubacterium, Porphyromonas, or Fusobacterium,
-# # flag those that are in Eubacterium
-# eubact_restr <- sapply(restricted_mOTU_names, function(x) grepl("Eubact",x, fixed = TRUE))
-
-
 ### we'll stick to the genera Eubacterium, Porphyromonas, Faecalibacteria,
 ### and Fusobacterium for now
 # store names of the mOTUs in these genera
@@ -179,39 +173,39 @@ ch_study_obs <- which(metadata$Country %in% c("CHI"))
 # let's fit a model!
 # ... emuFit will talk at you a bit, but don't worry about it
 ch_fit <-
-    emuFit(formula = ~ Group, # this is a formula telling radEmu what predictors to
-                    # use in fitting a model
-                    # we are using Group -- i.e., an indicator for which
-                    # participants have CRC diagnoses and which do not
-                    # as our predictor
-           data = metadata[ch_study_obs, #ch_study obs = we're
-                                                    # only looking at rows
-                                                    # containing observations
-                                                    # from the chinese study
-                                     ], # data
-                                                     # contains our predictor
-                                                     # data
-           Y = as.matrix(mOTU_table[ch_study_obs,which_mOTU_names]),
-           run_score_tests = FALSE) #which_mOTU_names = we're limiting the taxa
-                                       # we're looking at to Eubacterium, Faecalibacterium,
-                                       # Porphyromonas, and Fusobacterium
-                                       # (which_mOTU_names was constructed above)
+  emuFit(formula = ~ Group, # this is a formula telling radEmu what predictors to
+         # use in fitting a model
+         # we are using Group -- i.e., an indicator for which
+         # participants have CRC diagnoses and which do not
+         # as our predictor
+         data = metadata[ch_study_obs, #ch_study obs = we're
+                         # only looking at rows
+                         # containing observations
+                         # from the chinese study
+         ], # data
+         # contains our predictor
+         # data
+         Y = as.matrix(mOTU_table[ch_study_obs,which_mOTU_names]),
+         run_score_tests = FALSE) #which_mOTU_names = we're limiting the taxa
+# we're looking at to Eubacterium, Faecalibacterium,
+# Porphyromonas, and Fusobacterium
+# (which_mOTU_names was constructed above)
 ### Ok we have estimates and confidence intervals for the group effect
 ### Let's take a look:
 
 ch_fit %>%
   mutate(Genus = sapply(category,
                         function(x) ifelse(strsplit(x," ",fixed = TRUE)[[1]][1] %in% c("unknown","uncultured"),
-                                       strsplit(x," ",fixed = TRUE)[[1]][2],
-                                       strsplit(x," ",fixed = TRUE)[[1]][1]))) %>%
+                                           strsplit(x," ",fixed = TRUE)[[1]][2],
+                                           strsplit(x," ",fixed = TRUE)[[1]][1]))) %>%
   mutate(category = factor(category,levels = category[order(Genus)])) %>%
-    ggplot() + geom_point(aes(x = category, y = estimate,color = Genus),
-                          size = .5) +
-    geom_errorbar(aes(x = category, ymin = lower, ymax = upper,color = Genus),
-                  width = .25)+
-    theme_bw() +
-    theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
-    coord_cartesian(ylim = c(-5,15))
+  ggplot() + geom_point(aes(x = category, y = estimate,color = Genus),
+                        size = .5) +
+  geom_errorbar(aes(x = category, ymin = lower, ymax = upper,color = Genus),
+                width = .25)+
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  coord_cartesian(ylim = c(-5,15))
 
 ## Interestingly, we estimate a meta-mOTU ""unknown Eubacterium [meta_mOTU_v2_7116]" 
 ## assigned to Eubacteria
@@ -229,17 +223,15 @@ ch_fit %>%
 ## Fusobacterium Nucleatum, which we also estimate to have a much larger
 ## ratio of concentrations across groups than is typical among the taxa we 
 ## included in this model fit.
-start <- proc.time()
 robust_score_tests_eubacterium_mOTU_and_f_nucleatum <- 
   emuFit(formula = ~ Group,
-       data = metadata[ch_study_obs, ],
-       B = ch_fit,
-       test_kj = data.frame(k = c(2,2), j = c(3,36)), # j = 3 is F. nucleatum; 
-                                                      # j = 36 is the Eubacterium meta mOTU
-                                                      # (you can see this in output from the model we already fit)
- 
-       Y = as.matrix(mOTU_table[ch_study_obs,which_mOTU_names]))
-proc.time() - start
+         data = metadata[ch_study_obs, ],
+         B = ch_fit,
+         test_kj = data.frame(k = c(2,2), j = c(3,36)), # j = 3 is F. nucleatum; 
+         # j = 36 is the Eubacterium meta mOTU
+         # (you can see this in output from the model we already fit)
+         
+         Y = as.matrix(mOTU_table[ch_study_obs,which_mOTU_names]))
 ## Let's take a look at the test output:
 robust_score_tests_eubacterium_mOTU_and_f_nucleatum
 
@@ -254,7 +246,7 @@ cbind(mOTU_table[ch_study_obs,"unknown Eubacterium [meta_mOTU_v2_7116]"],
 
 ## Now let's look at F. nucleatum:
 cbind(mOTU_table[ch_study_obs,"Fusobacterium nucleatum s. nucleatum [ref_mOTU_v2_0777]"],
-           as.character(metadata$Group[ch_study_obs]))
+      as.character(metadata$Group[ch_study_obs]))
 
 # this also makes sense given what we found --  F. nucleatum shows up in a sizeable minority of 
 # CRC cases in relatively high counts, whereas we detect it (by Wirbel et al's standards)
@@ -397,4 +389,5 @@ all_country_fit %>%
   theme_bw() +
   theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
   coord_cartesian(ylim = c(-5,15))
+
 
