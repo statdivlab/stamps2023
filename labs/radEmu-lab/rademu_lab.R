@@ -262,7 +262,8 @@ cbind(mOTU_table[ch_study_obs,"Fusobacterium nucleatum s. nucleatum [ref_mOTU_v2
 # Run ALDEx2
 
 # ALDEx2 is built to analyze RNA-seq data but can be used for 16S or shotgun data
-# as well. It uses a Dirichlet-multinomial model to infer abundance from counts.
+# as well. It uses a Bayesian Dirichlet-multinomial model to test hypotheses about 
+# centered-log ratios of proportions.
 # It implements several tests, including a t test on abundance data transformed 
 # using a centered log ratio transformation. 
 
@@ -343,13 +344,8 @@ data.frame(pval = aldex_pvals,
 
 # Run ANCOM-BC
 
-# ANCOM-BC tests for differential abundance by estimating unknown sampling 
-# fractions (ratio of the expected absolute abundance of a taxon in a random 
-# sample to its absolute abundance in a unit volume of the ecosystem), correcting 
-# the bias induced by their differences through a log linear 
-# regression model including the estimated sampling fraction as an offset term, 
-# and identifying taxa that are differentially abundant with respect to the variable 
-# of interest.
+# ANCOM-BC is a model-based method for testing hypotheses about differential 
+# additive log-ratios.
 
 if (!("ANCOMBC" %in% row.names(installed.packages()))) {
   BiocManager::install("ANCOMBC")
@@ -421,9 +417,8 @@ data.frame(pval = ancom_pvals,
 
 # Run DESeq2
 
-# DESeq2 estimates the variance-mean dependence in count data from high-throughput 
-# sequencing data (it was originally built for RNA-seq data) and tests for 
-# differential expression based on a model using the negative binomial distribution.
+# DESeq2 is a model-based method for testing hypotheses about fold-differences in 
+# proportions. You can read more about the DESeq2 model in the Bootcamp slide 128.
 
 if (!("DESeq2" %in% row.names(installed.packages()))) {
   BiocManager::install("DESeq2")
