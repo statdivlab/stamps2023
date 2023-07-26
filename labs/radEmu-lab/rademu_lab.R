@@ -193,13 +193,13 @@ ch_fit <-
 ### Ok we have estimates and confidence intervals for the group effect
 ### Let's take a look:
 
-ch_fit %>%
+ch_df <- ch_fit %>%
   mutate(Genus = sapply(category,
                         function(x) ifelse(strsplit(x," ",fixed = TRUE)[[1]][1] %in% c("unknown","uncultured"),
                                            strsplit(x," ",fixed = TRUE)[[1]][2],
                                            strsplit(x," ",fixed = TRUE)[[1]][1]))) %>%
-  mutate(category = factor(category,levels = category[order(Genus)])) %>%
-  ggplot() + geom_point(aes(x = category, y = estimate,color = Genus),
+  mutate(category = factor(category,levels = category[order(Genus)])) 
+ggplot(ch_df) + geom_point(aes(x = category, y = estimate,color = Genus),
                         size = .5) +
   geom_errorbar(aes(x = category, ymin = lower, ymax = upper,color = Genus),
                 width = .25)+
@@ -253,7 +253,7 @@ cbind(mOTU_table[ch_study_obs,"Fusobacterium nucleatum s. nucleatum [ref_mOTU_v2
 # in only one control participant
 
 # We could run robust score tests for every taxon, (there is code below), but we 
-# will not now because it would take hours to run. 
+# will not now because it would too much lab time to run. 
 
 # How do these results relate to differential abundance testing in other packages?
 # Note that each software will be testing different hypotheses with different
@@ -278,25 +278,52 @@ citation("ALDEx2")
 
 # vector of covariate data 
 covariate <- metadata$Group[ch_study_obs]
+
 # round our data because ALDEx2 gets mad when the abundance inputs are not integers
 # swap rows and columns (ALDEx2 requires samples as columns)
 reads <- round(t(as.matrix(mOTU_table[ch_study_obs, which_mOTU_names])))
-# run clt and then t test 
-aldex_res <- aldex(reads, covariate, mc.samples=500, test="t", effect=TRUE,
-               include.sample.summary=FALSE, denom="all", verbose=FALSE)
-### TO-DO: make a plot from these results?? 
 
-# let's check out the p-values from ALDEx2
-aldex_pvals <- aldex_res$we.ep
+# run centered log ratio transformation on reads
+aldex_clr <- aldex.clr(reads, covariate, mc.samples=500, denom="all", verbose=FALSE)
 
-# although we have 47 taxa we are testing, we only have 46 p-values from 
-# ALDEx2
+# calculate effect sizes and differences between conditions
+# specifically, gets at the median difference between groups
+aldex_effect <- aldex.effect(aldex_clr, CI=T, verbose=FALSE)
+
+# lets check the dimension of our effect size data frame
+dim(aldex_effect)
+length(which_mOTU_names)
+
+# notice that while we have 47 mOTUs we are interested in, we only have effect size
+# estimates for 46. Let's look at why.
 tail(rowSums(reads))
 
 # This is because we have a single taxon (unknown Porphyromonas [meta_mOTU_v2_777])
 # that is not observed in any of the samples we are considering. 
 # ALDEx2 is unable to estimate parameters for a taxon that does not appear in 
-# any samples, so this p-value is not included. 
+# any samples, so this taxon is not included in analyses. 
+
+# plot effect sizes and their confidence intervals
+aldex_effect %>%
+  # clean data (add taxon information, add Genus)
+  mutate(category = restricted_mOTU_names[1:46],
+         Genus = ch_df$Genus[1:46]) %>% 
+  mutate(category = factor(category,levels = category[order(Genus)])) %>% 
+  ggplot() + geom_point(aes(x = category, y = effect, color = Genus),
+                      size = .5) +
+  geom_errorbar(aes(x = category, ymin = effect.low, ymax = effect.high,
+                    color = Genus),
+                width = .25) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+# No specific taxa jump out here. However, let's continue by running a t-test to
+# compare the two groups. 
+aldex_res <- aldex(reads, covariate, mc.samples=500, test="t", effect=TRUE,
+               include.sample.summary=FALSE, denom="all", verbose=FALSE)
+
+# let's check out the p-values from ALDEx2
+aldex_pvals <- aldex_res$we.ep
 
 # therefore, append a NA to the end of p-value vector for this taxa
 aldex_pvals <- c(aldex_pvals, NA)
@@ -351,12 +378,29 @@ res_names <- ancom_res$res$p_val$taxon
 length(res_names)
 # We only have 35 p-values. This means there are 12 taxa that are not included.
 
-# let's look at some confidence intervals for the coefficient for the Group variable
-# TO-DO: fill this in tomorrow
-
-# finally lets look at our p-values
+# Let's make a vector to tell us which taxa were included in this analysis
 full_names <- colnames(otus)
-taxa_used <- which(full_names %in% res_names)
+taxa_used <- full_names %in% res_names
+
+# Now let's look at some confidence intervals for the coefficient for the Group 
+# variable
+data.frame(category = restricted_mOTU_names[taxa_used],
+                       lfc = ancom_res$res$lfc$GroupCRC,
+                       lfc.low = ancom_res$res$lfc$GroupCRC - 1.96*ancom_res$res$se$GroupCRC,
+                       lfc.high = ancom_res$res$lfc$GroupCRC + 1.96*ancom_res$res$se$GroupCRC,
+                       Genus = ch_df$Genus[taxa_used]) %>%
+  mutate(category = factor(category,levels = category[order(Genus)])) %>% 
+  ggplot() + geom_point(aes(x = category, y = lfc, color = Genus),
+                        size = .5) +
+  geom_errorbar(aes(x = category, ymin = lfc.low, ymax = lfc.high,
+                    color = Genus),
+                width = .25) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
+
+# Here we see quite a few taxa that appear to be differentially abundant! 
+
+# Finally lets look at our p-values.
 ancom_pvals <- rep(NA, ncol(otus))
 ancom_pvals[taxa_used] <- ancom_res$res$p_val$GroupCRC
 ancom_pvals
@@ -402,9 +446,29 @@ deseq_res <- DESeq(dds)
 # obtain results
 deseq_test_res <- results(deseq_res)
 
-# TO-DO:  plot results in some way!!!!
+# Again, let's look at some confidence intervals for the coefficient for the Group 
+# variable
+data.frame(category = restricted_mOTU_names,
+           lfc = deseq_test_res$log2FoldChange,
+           lfc.low = deseq_test_res$log2FoldChange - 
+             1.96*deseq_test_res$lfcSE,
+           lfc.high = deseq_test_res$log2FoldChange + 
+             1.96*deseq_test_res$lfcSE,
+           Genus = ch_df$Genus) %>%
+  mutate(category = factor(category,levels = category[order(Genus)])) %>% 
+  ggplot() + geom_point(aes(x = category, y = lfc, color = Genus),
+                        size = .5) +
+  geom_errorbar(aes(x = category, ymin = lfc.low, ymax = lfc.high,
+                    color = Genus),
+                width = .25) +
+  theme_bw() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) 
 
-# save p-values
+# Similar to in ANCOM-BC, we see more extreme log fold differences for several 
+# Fusobacterium taxa. Additionally here we see more extreme log fold differences
+# for several Porphyromonas taxa. 
+
+# Let's now check out our p-values.
 deseq_pvals <- deseq_test_res$pvalue
 
 # again, compare to robust score tests with radEmu 
@@ -420,13 +484,17 @@ data.frame(pval = deseq_pvals,
 # for the Fusobacterium is very small (< 0.05), and the p-value for the Eubacterium
 # is larger and not significant at most alpha levels. 
 
-# This is the end of this lab. Feel free to continue below to fit different models,
-# and play around with radEmu, but several of these computations will take more
-# time to run. 
+# We can see that although each of these methods are estimating different parameters
+# and using different models, when we zoom in to these two specific taxa, they 
+# tend to give us similar results. 
 
+# ------------------------------------------------------------------------------
 
+# This is the end of this lab for today! Feel free to continue below to fit different models,
+# and play around with radEmu, but several of these computations will take 
+# significantly more time to run. 
 
-
+# ------------------------------------------------------------------------------
 
 ## We can run score tests for all taxa by setting run_score_tests = TRUE
 ## This is the kind of thing you might want to let run overnight, though -- 
