@@ -239,17 +239,23 @@ robust_score_tests_eubacterium_mOTU_and_f_nucleatum
 
 ## Does this make sense? Let's look at the Eubacterium mOTU counts alongside CRC group:
 cbind(mOTU_table[ch_study_obs,"unknown Eubacterium [meta_mOTU_v2_7116]"],
-      as.character(metadata$Group[ch_study_obs]))
+      as.character(metadata$Group[ch_study_obs])) %>%
+  as_tibble() %>%
+  group_by(V1 > 0, V2) %>%
+  summarise(n())
 
 ## We only detect this meta-mOTU in a single sample in the Chinese study cohort!
 ## So, yes -- it makes sense that our test returns a relatively large p-value
 
 ## Now let's look at F. nucleatum:
 cbind(mOTU_table[ch_study_obs,"Fusobacterium nucleatum s. nucleatum [ref_mOTU_v2_0777]"],
-      as.character(metadata$Group[ch_study_obs]))
+      as.character(metadata$Group[ch_study_obs])) %>%
+  as_tibble() %>%
+  group_by(V1 > 0, V2) %>%
+  summarise(n())
 
 # this also makes sense given what we found --  F. nucleatum shows up in a sizeable minority of 
-# CRC cases in relatively high counts, whereas we detect it (by Wirbel et al's standards)
+# CRC cases, whereas we detect it (by Wirbel et al's standards)
 # in only one control participant
 
 # We could run robust score tests for every taxon, (there is code below), but we 
