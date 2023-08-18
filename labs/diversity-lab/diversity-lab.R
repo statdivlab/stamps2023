@@ -1,4 +1,4 @@
-## Diversity estimation lab - STAMPS 2022
+## Diversity estimation lab - STAMPS 2023
 ## Sarah Teichman, Amy Willis, and Pauline Trinh
 
 # --------------- `breakaway` and `DivNet` ---------------------------
