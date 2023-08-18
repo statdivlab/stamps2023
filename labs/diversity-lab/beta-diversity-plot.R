@@ -127,6 +127,9 @@ ggplot(sample_type_df, aes(x = type, y = dissim)) +
   ylim(c(0, 1)) + 
   labs(x = "", y = "Bray-Curtis dissimilarity")
 
+# Note: if you have a lot of points you might consider using 
+# geom_boxplot() instead of geom_jitter() 
+
 # Finally, we can run a t-test to compare the mean of within versus
 # between group distances
 t.test(sample_type_df %>% filter(type != "Between") %>% pull(dissim),
