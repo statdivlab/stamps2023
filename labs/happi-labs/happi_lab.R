@@ -128,7 +128,7 @@ anova(ha, h0, test = "Rao")[2, "Pr(>Chi)"]
 
 # Using a GLM + Rao score test we see that the p-value when testing for differences between 
 # gene presence in farm worker compared to community control associated F. prausnitzii MAGs is 
-# [1] 0.07246124
+# 0.072.
 
 # Recall though, we were concerned about conflating of this difference in gene detection with 
 # differences in mean coverage. We would expect that if this were the case, a method 
@@ -171,9 +171,9 @@ happi_results <- happi(outcome=isomerase$`L-rhamnose isomerase`,
 
 # Let's look  at our results! 
 
-happi_results$p_val
+happi_results$pvalue_LRT
 
-# We see that the p-value we get from `happi` is p = 0.304 and that this p-value is 
+# We see that the p-value we get from `happi` is p = 0.320 and that this p-value is 
 # larger than the p-value (p = 0.07) we got using GLM + Rao when we didn't account for mean coverage. 
 
 # Recall from our picture that this gene was more detected in higher-converage
@@ -246,7 +246,7 @@ sum(error_cogs)
 # we were not able to optimize the model for 25 of the 50 COG functions
 
 # make a vector of p-values for COG functions for which we were able to optimize the model
-pvalue_prausnitzii <- lapply(prausnitzii_results[!error_cogs], function(x) x$p_val) %>% unlist
+pvalue_prausnitzii <- lapply(prausnitzii_results[!error_cogs], function(x) x$pvalue_LRT) %>% unlist
 # make a matrix of coefficients for COG functions for which we were able to optimize the model
 beta_prausnitzii <- lapply(prausnitzii_results[!error_cogs], function(x) x$beta) %>% do.call("rbind",.)
 
@@ -313,7 +313,7 @@ sum(error_cogs_e05)
 # we were not able to optimize the model for 8 of the 50 COG functions
 
 # make a vector of p-values for COG functions for which we were able to optimize the model
-pvalue_prausnitzii_e05 <- lapply(prausnitzii_results_e05[!error_cogs_e05], function(x) x$p_val) %>% unlist
+pvalue_prausnitzii_e05 <- lapply(prausnitzii_results_e05[!error_cogs_e05], function(x) x$pvalue_LRT) %>% unlist
 # make a matrix of coefficients for COG functions for which we were able to optimize the model
 beta_prausnitzii_e05 <- lapply(prausnitzii_results_e05[!error_cogs_e05], function(x) x$beta) %>% do.call("rbind",.)
 

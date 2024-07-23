@@ -59,7 +59,12 @@ if (!("corncob" %in% row.names(installed.packages()))) {
 }
 library(corncob)
 library(phyloseq)
-data(soil_phylo)
+data(soil_phylo_sample)
+data(soil_phylo_otu)
+data(soil_phylo_taxa)
+soil_phylo <- phyloseq::phyloseq(phyloseq::sample_data(soil_phylo_sample),
+                                 phyloseq::otu_table(soil_phylo_otu, taxa_are_rows = TRUE),
+                                 phyloseq::tax_table(soil_phylo_taxa))
 
 # --------------------------- Manipulate data -------------------------------------
 
@@ -223,9 +228,9 @@ happi_results <- happi(outcome = tnct_df$Tenericutes,
 
 # Let's look  at our results! 
 
-happi_results$p_val
+happi_results$pvalue_LRT
 
-# Our p-value here is 0.013. In this case, at an alpha level of 0.05, we still able to 
+# Our p-value here is 0.034. In this case, at an alpha level of 0.05, we still able to 
 # reject the null hypothesis. However, the strength of our evidence against the null hypothesis
 # is slightly lower (a higher p-value) because we've now accounted for different sequencing depth 
 # in our model. 
@@ -293,7 +298,7 @@ sum(error_taxa)
 # we were not able to optimize the model for 6 of the 39 taxa
 
 # make a vector of p-values for taxa for which we were able to optimize the model
-pvalues <- lapply(all_taxa_results[!error_taxa], function(x) x$p_val) %>% unlist
+pvalues <- lapply(all_taxa_results[!error_taxa], function(x) x$pvalue_LRT) %>% unlist
 # make a matrix of coefficients for COG functions for which we were able to optimize the model
 betas <- lapply(all_taxa_results[!error_taxa], function(x) x$beta) %>% do.call("rbind",.)
 
@@ -354,7 +359,7 @@ all_taxa_results_e05 <- mclapply(1:39, run_happi_all_e05, mc.cores=6)
 # we were able to optimize our model for all taxa. Great!
 
 # make a vector of p-values for taxa for which we were able to optimize the model
-pvalues_e05 <- lapply(all_taxa_results_e05, function(x) x$p_val) %>% unlist
+pvalues_e05 <- lapply(all_taxa_results_e05, function(x) x$pvalue_LRT) %>% unlist
 # make a matrix of coefficients for COG functions for which we were able to optimize the model
 betas_e05 <- lapply(all_taxa_results_e05, function(x) x$beta) %>% do.call("rbind",.)
 
@@ -386,11 +391,11 @@ hyp_results_comparison %>%
   ylim(c(0,1))
 
 # Here we can see that many of our p-values are very similar when we change epsilon. However
-# there is one taxon where the p-value changes by more than 0.2. Let's find which taxon this 
+# there is one taxon where the p-value changes by more than 0.3. Let's find which taxon this 
 # change in p-value is coming from. 
 
 hyp_results_comparison %>% 
-  filter(abs(pvalue_diff) > 0.1) %>%
+  filter(abs(pvalue_diff) > 0.3) %>%
   select(taxon, contains("p"))
 
 # These results are coming from OD1. Let's look closer at this Phylum! 
@@ -399,8 +404,8 @@ hyp_results_comparison %>%
   filter(taxon == "OD1") %>%
   select(taxon, contains("p"))
 
-# We can see that the p-value when epsilon = 0 is 0.518 and when epsilon = 0.05 the p-value is
-# 0.208. Let's look closer at this taxon.
+# We can see that the p-value when epsilon = 0 is 1 and when epsilon = 0.05 the p-value is
+# 0.133. Let's look closer at this taxon.
 
 ggplot(soil_df, aes(x = seq_depth, y = `OD1`, col = soil_add)) + 
   geom_jitter(height = 0.08, width = 0.00) + 
